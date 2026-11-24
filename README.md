@@ -1,55 +1,68 @@
 # Proyecto 2 — Integración de eventos empresariales (AWS)
 
 ## Resumen ejecutivo
-Solución de ingesta de eventos desde una API, almacenamiento raw, validación, deduplicación y publicación en PostgreSQL. Simula localmente un patrón serverless basado en S3 + Lambda, con SQL para persistencia analítica.
+Pipeline batch de eventos JSON que implementa almacenamiento raw, validación, deduplicación y publicación de una capa curada. El diseño representa un patrón serverless basado en S3 + Lambda; la ejecución incluida es local.
 
-**Stack:** Python 3.10+, SQL, PostgreSQL (opcional), AWS S3/Lambda (arquitectura objetivo).  
-**Ejecución sin costo:** el flujo principal utiliza Python estándar y archivos locales. No requiere AWS ni PostgreSQL para demostrar el procesamiento.
+**Stack:** Python 3.10+, JSON, SQL y PostgreSQL (SQL de referencia).  
+**Ejecución local:** Python estándar, sin dependencias externas ni recursos AWS.
 
 ## Caso de negocio
-Una compañía recibe eventos de pedidos, pagos y despachos desde una API de comercio. Requiere trazabilidad, procesamiento idempotente y una capa curada para reportería operacional.
+Una compañía recibe eventos de pedidos, pagos y despachos desde una API de comercio. Requiere trazabilidad, procesamiento reproducible y una capa curada para reportería operacional.
 
-## Arquitectura
-```mermaid
-flowchart LR
- A[API / JSON events] --> B[S3 landing]
- B --> C[Lambda trigger]
- C --> D[Validación y deduplicación]
- D --> E[S3 curated]
- D --> F[PostgreSQL / RDS opcional]
- F --> G[BI / reporting]
- C --> H[CloudWatch logs]
-```
+## Arquitectura lógica
+- **Landing/raw:** conserva el payload JSON recibido.
+- **Validación:** verifica estructura, campos obligatorios, timestamp, monto finito/no negativo y cliente informado.
+- **Deduplicación:** usa `event_id` como clave natural.
+- **Curated/rejected:** separa eventos válidos de registros rechazados con motivo y número de fila.
+- **Persistencia opcional:** SQL PostgreSQL con restricción única y patrón `ON CONFLICT DO NOTHING`.
 
-## Ejecutar localmente
-Desde esta carpeta:
+## Ejecución local
+Desde la raíz del repositorio:
 ```bash
 python src/process_events.py
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
+
 Produce:
-- `data/landing/`: copia raw de entrada.
-- `data/curated/events_curated.csv`: eventos válidos y únicos.
-- `data/rejected/events_rejected.csv`: eventos rechazados.
-- `reports/run_summary.json`: métricas de ejecución.
+- `data/landing/events_raw.json`
+- `data/curated/events_curated.csv`
+- `data/rejected/events_rejected.csv`
+- `reports/run_summary.json`
 
-Sin dependencias externas. Python 3.10+.
+## Controles de calidad
+- El payload raíz debe ser un arreglo JSON.
+- Cada elemento debe ser un objeto.
+- Campos obligatorios presentes; identificador, tipo, origen y cliente no vacíos.
+- `event_id` único dentro del lote.
+- Timestamp ISO válido.
+- Importe numérico, finito y no negativo.
+- Salidas con encabezados estables incluso cuando no existan registros aceptados/rechazados.
+- Reporte de cantidades y motivos de rechazo.
 
-## Diseño de idempotencia
-`event_id` es la clave natural. La salida se reconstruye desde el archivo raw, por lo que volver a ejecutar no duplica registros. En producción, usar `INSERT ... ON CONFLICT DO NOTHING` o `MERGE`, junto con un control de lote/checkpoint.
+## Idempotencia y reproceso
+El procesamiento local reconstruye las salidas desde el JSON raw, por lo que una nueva ejecución no acumula duplicados en los archivos. Para persistencia relacional, `sql/postgresql/02_idempotent_load.sql` usa `ON CONFLICT (event_id) DO NOTHING`. En una solución distribuida se debe complementar con identificador de lote/checkpoint y política de reintentos.
 
-## AWS opcional
-- S3: `incoming/`, `processed/`, `rejected/`.
-- Lambda: disparador S3 para validar y transformar.
-- IAM: rol de mínimo privilegio.
-- CloudWatch: logs, métricas y alarmas.
-- RDS PostgreSQL: persistencia relacional opcional.
+## SQL / PostgreSQL
+Los scripts de `sql/postgresql/` definen el esquema de destino y una carga idempotente de referencia. La conexión a PostgreSQL no forma parte de la ejecución local.
 
-El código local representa la lógica de negocio. La adaptación a Lambda requiere empaquetar el handler, configurar permisos, variables de entorno y límites de ejecución. No desplegar recursos para una entrevista; mostrar el diagrama y el flujo local es suficiente.
+## Calidad continua
+GitHub Actions ejecuta el pipeline y las pruebas unitarias en cada push y pull request. El resultado real se consulta en la pestaña **Actions**.
 
-## Seguridad y operación
-- No almacenar secretos en código.
-- Aplicar IAM least privilege.
-- Cifrar almacenamiento y conexiones.
-- Definir retención y política de lifecycle.
-- Reintentos con backoff y cola DLQ para fallos persistentes.
-- Alertas por fallos, retrasos y aumento de rechazos.
+## Evolución AWS (diseño, no despliegue)
+1. API Gateway recibe eventos autenticados.
+2. S3 almacena el objeto raw con versionado y cifrado.
+3. Lambda valida y transforma el evento o lote.
+4. S3 separa curated y rejected.
+5. SQS DLQ gestiona fallos persistentes; reintentos con backoff.
+6. IAM aplica mínimo privilegio y CloudWatch centraliza logs, métricas y alarmas.
+7. RDS PostgreSQL puede servir como destino relacional cuando el caso de uso lo requiera.
+
+No se ha desplegado infraestructura AWS en este repositorio. El proyecto es demostrable sin cuenta cloud ni costos.
+
+## Decisiones técnicas para entrevista
+- Raw conserva evidencia para auditoría y reproceso.
+- Validación previa evita contaminar la capa curada.
+- La clave natural evita duplicidad dentro del lote.
+- Decimal evita errores de punto flotante en importes.
+- La separación curated/rejected permite monitorear calidad sin perder trazabilidad.
+- Las pruebas unitarias cubren reglas de negocio y entradas malformadas.
