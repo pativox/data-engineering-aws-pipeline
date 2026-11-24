@@ -10,6 +10,17 @@ CREATE TABLE IF NOT EXISTS integration.events (
   ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Staging deliberately has no primary key so the incoming batch can retain
+-- duplicate event_ids for validation/reconciliation before the final merge.
+CREATE TABLE IF NOT EXISTS integration.staging_events (
+  event_id VARCHAR(64),
+  event_type VARCHAR(80),
+  event_timestamp TIMESTAMPTZ,
+  customer_id VARCHAR(64),
+  amount NUMERIC(14,2),
+  source VARCHAR(80)
+);
+
 CREATE INDEX IF NOT EXISTS ix_events_timestamp
   ON integration.events (event_timestamp);
 
