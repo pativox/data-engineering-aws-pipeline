@@ -1,9 +1,15 @@
-# AWS Event Integration Pipeline
+# Proyecto 2 — Integración de eventos empresariales (AWS)
 
-Proyecto demostrativo de ingeniería de datos que procesa eventos JSON con validación, deduplicación e idempotencia, inspirado en una arquitectura serverless de AWS.
+## Resumen ejecutivo
+Solución de ingesta de eventos desde una API, almacenamiento raw, validación, deduplicación y publicación en PostgreSQL. Simula localmente un patrón serverless basado en S3 + Lambda, con SQL para persistencia analítica.
 
-## Arquitectura objetivo
+**Stack:** Python 3.10+, SQL, PostgreSQL (opcional), AWS S3/Lambda (arquitectura objetivo).  
+**Ejecución sin costo:** el flujo principal utiliza Python estándar y archivos locales. No requiere AWS ni PostgreSQL para demostrar el procesamiento.
 
+## Caso de negocio
+Una compañía recibe eventos de pedidos, pagos y despachos desde una API de comercio. Requiere trazabilidad, procesamiento idempotente y una capa curada para reportería operacional.
+
+## Arquitectura
 ```mermaid
 flowchart LR
  A[API / JSON events] --> B[S3 landing]
@@ -15,42 +21,35 @@ flowchart LR
  C --> H[CloudWatch logs]
 ```
 
-## Ejecución local
-
-Requiere Python 3.10+. No necesita paquetes externos ni cuenta AWS.
-
+## Ejecutar localmente
+Desde esta carpeta:
 ```bash
 python src/process_events.py
 ```
+Produce:
+- `data/landing/`: copia raw de entrada.
+- `data/curated/events_curated.csv`: eventos válidos y únicos.
+- `data/rejected/events_rejected.csv`: eventos rechazados.
+- `reports/run_summary.json`: métricas de ejecución.
 
-El pipeline lee eventos JSON, conserva una copia raw, valida estructura y campos, separa registros aceptados y rechazados y genera un resumen JSON.
+Sin dependencias externas. Python 3.10+.
 
-## Diseño técnico
+## Diseño de idempotencia
+`event_id` es la clave natural. La salida se reconstruye desde el archivo raw, por lo que volver a ejecutar no duplica registros. En producción, usar `INSERT ... ON CONFLICT DO NOTHING` o `MERGE`, junto con un control de lote/checkpoint.
 
-- **Landing:** conservación del evento original para trazabilidad.
-- **Validación:** estructura, identificador, timestamp y reglas de negocio.
-- **Curated:** eventos válidos y únicos.
-- **Idempotencia:** la salida se reconstruye desde el origen; el SQL PostgreSQL utiliza `ON CONFLICT DO NOTHING`.
-- **Operación objetivo:** S3, Lambda, IAM de mínimo privilegio, CloudWatch y RDS PostgreSQL opcional.
+## AWS opcional
+- S3: `incoming/`, `processed/`, `rejected/`.
+- Lambda: disparador S3 para validar y transformar.
+- IAM: rol de mínimo privilegio.
+- CloudWatch: logs, métricas y alarmas.
+- RDS PostgreSQL: persistencia relacional opcional.
 
-## Estructura
+El código local representa la lógica de negocio. La adaptación a Lambda requiere empaquetar el handler, configurar permisos, variables de entorno y límites de ejecución. No desplegar recursos para una entrevista; mostrar el diagrama y el flujo local es suficiente.
 
-- `src/process_events.py`: procesamiento local.
-- `data/incoming/`: datos sintéticos de entrada.
-- `data/landing/`: copia raw.
-- `data/curated/`: eventos válidos.
-- `data/rejected/`: eventos rechazados.
-- `sql/postgresql/`: esquema y carga idempotente.
-- `reports/`: métricas de ejecución.
-- `docs/interview_notes.md`: decisiones técnicas para entrevista.
-
-## Alcance y transparencia
-
-El procesamiento Python se ejecuta localmente. S3, Lambda, CloudWatch y RDS describen la arquitectura objetivo; no se afirma un despliegue productivo en AWS. Todos los datos del repositorio son sintéticos.
-
-## Próximas mejoras
-
-- Pruebas automatizadas con pytest.
-- Handler Lambda y plantilla de infraestructura como código.
-- CI con GitHub Actions.
-- Métricas y alertas operacionales.
+## Seguridad y operación
+- No almacenar secretos en código.
+- Aplicar IAM least privilege.
+- Cifrar almacenamiento y conexiones.
+- Definir retención y política de lifecycle.
+- Reintentos con backoff y cola DLQ para fallos persistentes.
+- Alertas por fallos, retrasos y aumento de rechazos.

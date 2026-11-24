@@ -1,0 +1,11 @@
+{
+  "input_events": 101,
+  "valid_events": 100,
+  "rejected_events": 1,
+  "rejection_reasons": {
+    "duplicate_event_id": 1
+  },
+  "idempotency_key": "event_id",
+  "status": "PASS_WITH_REJECTS",
+  "generated_at_utc": "2026-11-19T16:55:26"
+}

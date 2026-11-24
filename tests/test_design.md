@@ -1,10 +1,6 @@
-# Estrategia de pruebas
-
-La validación continua ejecuta el pipeline con Python 3.11 mediante GitHub Actions.
-
-Casos a automatizar con pytest:
-- Evento válido se publica en curated.
-- `event_id` duplicado se rechaza.
-- Timestamp inválido se rechaza.
-- Monto negativo se rechaza.
-- Reejecución desde el mismo origen produce el mismo conjunto de claves.
+# Pruebas manuales sugeridas
+- Ejecutar dos veces: la cantidad de eventos curados debe mantenerse estable.
+- Confirmar que el event_id duplicado se rechaza.
+- Insertar monto negativo y verificar rechazo.
+- Insertar timestamp inválido y verificar rechazo.
+- Verificar que válidos + rechazados = eventos recibidos.
