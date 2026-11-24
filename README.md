@@ -43,7 +43,7 @@ Produce:
 El procesamiento local reconstruye las salidas desde el JSON raw, por lo que una nueva ejecución no acumula duplicados en los archivos. Para persistencia relacional, `sql/postgresql/02_idempotent_load.sql` usa `ON CONFLICT (event_id) DO NOTHING`. En una solución distribuida se debe complementar con identificador de lote/checkpoint y política de reintentos.
 
 ## SQL / PostgreSQL
-Los scripts de `sql/postgresql/` definen el esquema de destino y una carga idempotente de referencia. La conexión a PostgreSQL no forma parte de la ejecución local.
+Los scripts de `sql/postgresql/` crean la tabla final y una tabla staging para recibir el lote curado. La carga final aplica `DISTINCT ON (event_id)` y `ON CONFLICT DO NOTHING`. La conexión a PostgreSQL no forma parte de la ejecución local.
 
 ## Calidad continua
 GitHub Actions ejecuta el pipeline y las pruebas unitarias en cada push y pull request. El resultado real se consulta en la pestaña **Actions**.
@@ -58,6 +58,12 @@ GitHub Actions ejecuta el pipeline y las pruebas unitarias en cada push y pull r
 7. RDS PostgreSQL puede servir como destino relacional cuando el caso de uso lo requiera.
 
 No se ha desplegado infraestructura AWS en este repositorio. El proyecto es demostrable sin cuenta cloud ni costos.
+
+## Documentación complementaria
+- [Diagrama de arquitectura](docs/architecture.md)
+- [Runbook de ejecución y carga SQL](docs/runbook.md)
+
+Los archivos generados en landing, curated, rejected y reports se excluyen de Git mediante `.gitignore`.
 
 ## Decisiones técnicas para entrevista
 - Raw conserva evidencia para auditoría y reproceso.
